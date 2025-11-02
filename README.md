@@ -41,17 +41,54 @@
 </div>
 
 ## Setup
-1. Create a dedicated Python environment and install the dependencies
+1. Create a dedicated Python environment and install the dependencies. The
+   project ships with an `environment.yml` that mirrors the configuration shared
+   by community members who resolved the installation hurdles reported in recent
+   GitHub issues about building `fused-ssim` and `gsplat`.
+
     ```bash
     git clone https://github.com/NYU-ICL/image-gs.git
     cd image-gs
     conda env create -f environment.yml
     conda activate image-gs
+
+    # The fused-ssim build looks for Intel MKL symbols.  The pinned version
+    # below resolves the "undefined symbol: iJIT_NotifyEvent" error raised in
+    # both issues linked above.
+    pip install mkl==2024.0
+
+    # Build fused-ssim without isolation so it can use the activated PyTorch.
     pip install git+https://github.com/rahul-goel/fused-ssim/ --no-build-isolation
-    cd gsplat
-    pip install -e ".[dev]"
-    cd ..
     ```
+
+    The CUDA extensions provided by `fused-ssim` and `gsplat` require access to
+    the CUDA Toolkit headers and libraries that match your installed driver.
+    If you installed the toolkit through Conda (`conda install nvidia::cuda-toolkit`),
+    make sure the environment variables below point to that toolkit before
+    building the extensions:
+
+    ```bash
+    export CPATH="${CONDA_PREFIX}/targets/x86_64-linux/include:${CPATH}"
+    export LD_LIBRARY_PATH="${CONDA_PREFIX}/targets/x86_64-linux/lib:${LD_LIBRARY_PATH}"
+    export PATH="${CONDA_PREFIX}/bin:${PATH}"
+    ```
+
+    When using a system-wide CUDA Toolkit (for example CUDA 12.6 installed on
+    WSL2), replace `${CONDA_PREFIX}` with the root of that installation
+    (typically `/usr/local/cuda-<version>`).  You can verify that the toolkit is
+    visible by running `nvcc --version`.
+
+    Finally, install the local copy of `gsplat` in editable mode:
+
+    ```bash
+    cd third_party/gsplat_package
+    pip install -e ".[dev]"
+    cd ../..
+    ```
+
+    Renaming the vendored `gsplat` source directory avoids the namespace clash
+    that previously caused Python to import the folder instead of the compiled
+    package when running scripts directly from the repository.
 2. Download the image and texture datasets from [OneDrive](https://1drv.ms/u/c/3a8968df8a027819/EeshjZJlMtdCmvvmESiN2pABM71EDaoLYmEwuOvecg0tAA?e=GybqBv) and organize the folder structure as follows
     ```
     image-gs
@@ -59,6 +96,23 @@
         ├── images
         └── textures
     ```
+
+### Example configuration (tested on WSL2)
+
+Community members have successfully reproduced the full pipeline on the
+following stack:
+
+- Windows 11 Pro 25H2 with WSL2 running Ubuntu 22.04 LTS
+- NVIDIA driver 560.94 (CUDA driver version 12.6) installed inside WSL2 via
+  `sudo ubuntu-drivers install`
+- CUDA Toolkit 12.6 Update 3 installed from the [official network
+  installer](https://developer.nvidia.com/cuda-12-6-3-download-archive?target_os=Linux&target_arch=x86_64&Distribution=WSL-Ubuntu&target_version=2.0&target_type=deb_network)
+- Python 3.11.10 environment created with `uv` or `conda`
+- PyTorch 2.8.0 wheels from `https://download.pytorch.org/whl/cu126`
+
+Running `nvcc --version` and `nvidia-smi` inside the activated environment is a
+good sanity check that the drivers and toolkit are aligned before compiling the
+CUDA extensions used by Image-GS.
 3. (Optional) To run saliency-guided Gaussian position initialization, download the pre-trained [EML-Net](https://github.com/SenJia/EML-NET-Saliency) models ([res_imagenet.pth](https://drive.google.com/open?id=1-a494canr9qWKLdm-DUDMgbGwtlAJz71), [res_places.pth](https://drive.google.com/open?id=18nRz0JSRICLqnLQtAvq01azZAsH0SEzS), [res_decoder.pth](https://drive.google.com/open?id=1vwrkz3eX-AMtXQE08oivGMwS4lKB74sH)) and place them under the `models/emlnet/` folder
     ```
     image-gs
